@@ -1,7 +1,3 @@
-//
-// Created by Tsz-Chiu Au on 3/1/22.
-//
-
 #include <iostream>
 #include <iomanip>
 #include <random>
@@ -19,9 +15,10 @@
 #define USE_CACHE true
 
 
-// **************************************************************************************
-//   Formation Graph
-// **************************************************************************************
+/**************************************************************************************
+ *   These are the definitions of some helper functions for managing formation graphs
+ ************************************************************************************** */
+
 
 std::ostream& operator<<(std::ostream& out, const FormationGraph& graph) {
   for(int vid=0; vid<graph.getVertexNum(); vid++) {
@@ -53,6 +50,7 @@ std::ostream& operator<<(std::ostream& out, const FormationGraph& graph) {
   return out;
 }
 
+
 std::ostream& operator<<(std::ostream& out, const FormationGraphResult& graph_result) {
   std::cout << "[";
   for(auto a : graph_result.assignment) {
@@ -75,9 +73,12 @@ std::ostream& operator<<(std::ostream& out, const FormationGraphDynProgResult& g
   }
   std::cout << " ] (" << graph_result.time << ")";
   return out;
-
 }
 
+
+/**************************************************************************************
+ *  The definitions of the member functions in FormationGraphDynProgResult
+ ************************************************************************************** */
 
 
 FormationGraphResult FormationGraphDynProgResult::toFormationGraphResultByFirst(const FormationGraph& graph) const {
@@ -133,6 +134,11 @@ FormationGraph FormationGraphDynProgResult::makeReducedGraph(const FormationGrap
 }
 
 
+/**************************************************************************************
+ *   These are the definitions of some helper functions for calculating the times
+ ************************************************************************************** */
+
+
 void calc_formation_graph_exact_time_dfs(FormationSchedule& plan,
                                          const FormationGraph& graph,
                                          const std::vector<int>& assignment,
@@ -172,6 +178,7 @@ FormationTime calc_formation_graph_end_time_schedule_max_time(const FormationSch
   return max_time;
 }
 
+
 FormationSchedule calc_formation_graph_schedule(const FormationGraph& graph, const FormationGraphResult& result, const FormationSchedule& end_time_schedule) {
   FormationSchedule schedule = end_time_schedule;
 
@@ -190,22 +197,20 @@ void advanceFormationGraphSchedule(FormationSchedule& schedule, FormationTime ti
 }
 
 
-// **************************************************************************************
-//   Formation Graph Brute Force
-// **************************************************************************************
+/**************************************************************************************
+ *  The brute force algorithm
+ *
+ *  This is used to check the correctness of the graph search algorithm and the dynamic programming algorithm.
+ ************************************************************************************** */
 
 
 void formation_graph_brute_force_eval_dfs(FormationTime& max_value, const FormationGraph& graph, const std::unordered_map<int,int>& action_combination, const FormationGraph::Vertex& vertex, FormationTime sum, bool isDebug= false) {
   int a1_id = action_combination.at(vertex.id());
-//  if (isDebug) __pp__("vid=", vertex.id(), " aid=", a1_id, " a=", vertex.get()[a1_id]);
-//  if (isDebug) __pp__("sum = ", sum);
   int cost = sum + vertex.get()[a1_id];
   if (cost > max_value) { max_value = cost; }
-//  if (isDebug) __pp__("  cost = ", cost);
 
   for (auto[edge, vertex2]: vertex.outgoingEVList()) {
     int a2_id = action_combination.at(vertex2.id());
-//    if (isDebug) __pp__("edge.get()[", a1_id, "][", a2_id, "] = ", edge.get()[a1_id][a2_id]);
     formation_graph_brute_force_eval_dfs(max_value, graph, action_combination, vertex2, sum + edge.get()[a1_id][a2_id],
                                          isDebug);
   }
@@ -224,14 +229,11 @@ void formation_graph_brute_force_dfs(FormationTime& min_value, std::vector<int>&
 {
   if (action_combination.size() == static_cast<unsigned int>(graph.getVertexNum())) {
     auto v = formation_graph_brute_force_eval(graph, action_combination, init_vertex);
-    // __pp__(v, " ", min_action_combination);  // debug
     if (v < min_value) {
       min_value = v;
       for(int vid=0; vid<graph.getVertexNum(); vid++) {
         min_action_combination[vid] = action_combination[vid];
       }
-//      __pp__(min_value, " ", min_action_combination);  // debug
-//      formation_graph_brute_force_eval(graph, action_combination, true);  // debug
     }
   } else {
     int id = vertex_itr->id();
@@ -258,9 +260,29 @@ FormationGraphResult formation_graph_brute_force(const FormationGraph& graph, in
 }
 
 
-// **************************************************************************************
-//   Formation Graph Dynamic Programming
-// **************************************************************************************
+/**************************************************************************************
+ *   Formation Graph Dynamic Programming
+ *
+ *   This implementation is slightly different from the Algorithm 1 in the paper.
+ *   In the paper, Algorithm 1 computes every entry in the P table, which is edge_stored_values
+ *   in the function below. However, the following implementation avoid computing every
+ *   entry in edge_stored_values by doing a depth-first search, which only compute the entries
+ *   that are relevant to the value of the entry of the root node in edge_stored_values.
+ *
+ ************************************************************************************** */
+
+/**************************************************************************************
+ *   formation_graph_dynamic_programming_dfs()
+ *
+ *   The main loop of the dfs of the dynamic programming method. This computes Equation 5 in the paper directly.
+ *
+ *     graph               - the formation graph
+ *     edge_stored_values  - the table for dynamic programming
+ *     vertex1             - the current vertex
+ *     last_vertex         - the parent of vertex1
+ *     last_a_id           - the action id chosen for last_vertex
+ *     init_vertex_id      - the vertex id of the root vertex
+ ************************************************************************************** */
 
 
 FormationGraphDynProgResult formation_graph_dynamic_programming_dfs(const FormationGraph& graph,
@@ -270,31 +292,36 @@ FormationGraphDynProgResult formation_graph_dynamic_programming_dfs(const Format
                                                                     int last_a_id,
                                                                     int init_vertex_id)
 {
+  // initialize the min value; the initial min value is infinity (i.e., no value)
   FormationGraphDynProgResult min_value(std::numeric_limits<FormationTime>::max(), graph.getVertexNum());
 
   for(unsigned int a1_id = 0; a1_id < vertex1.get().size(); a1_id++) {
     auto a1 = vertex1.get()[a1_id];
 
+    // initialize the max value; the initial max value is a1
     FormationGraphDynProgResult max_value(a1, graph.getVertexNum());
 
+    // for each children of vertex1,
     for (auto[edge, vertex2]: vertex1.outgoingEVList()) {
       FormationGraphDynProgResult& v_of_max = edge_stored_values[vertex1.id()][vertex2.id()][a1_id];
-      if (v_of_max.getTime() < 0) {
+      if (v_of_max.getTime() < 0) {  // haven't compute and store the value yet
+        // compute and store the value in v_of_max as well as edge_stored_values
         v_of_max = formation_graph_dynamic_programming_dfs(graph, edge_stored_values, vertex2, vertex1, a1_id, init_vertex_id);
         assert(v_of_max.getTime() >= 0);
       }
+      // updating the max value
       if (v_of_max.getTime() > max_value.getTime()) {
         max_value.setTime(v_of_max.getTime());
       }
-      max_value.assign(v_of_max.getAssignment());
+      max_value.assign(v_of_max.getAssignment());  // need to rename the chosen action of the current max value
     }
 
-//    assert((vertex1.id()>0)?(last_a_id>=0):(last_a_id<0));
-//    int delta = (vertex1.id()==0)?0:(graph.getEdge(last_vertex, vertex1).get()[last_a_id][a1_id]);
+    // add delta to the max value
     assert((vertex1.id()!=init_vertex_id)?(last_a_id>=0):(last_a_id<0));
     int delta = (vertex1.id()==init_vertex_id)?0:(graph.getEdge(last_vertex, vertex1).get()[last_a_id][a1_id]);
-
     max_value.addTime(delta);
+
+    // updating the min value
     if (max_value.getTime() < min_value.getTime()) {
       min_value = max_value;
       min_value.assign(vertex1.id(), a1_id);
@@ -305,10 +332,22 @@ FormationGraphDynProgResult formation_graph_dynamic_programming_dfs(const Format
 }
 
 
+/**************************************************************************************
+ *   formation_graph_dynamic_programming()
+ *
+ *   The main function of the dynamic programming algorithm.
+ *
+ *     graph          - the formation graph
+ *     init_vertex_id - the vertex id of the root vertex
+ ************************************************************************************** */
+
 FormationGraphDynProgResult formation_graph_dynamic_programming(const FormationGraph& graph, int init_vertex_id) {
 
-  // create the dynamic table
+  // The table for dynamic programming.  There is one entry for each action a1 on an edge (v1, v2).
+  // The entry edge_stored_values(v1_id, v2_id, a1_id) stores a solution
   std::vector<std::vector<std::vector<FormationGraphDynProgResult>>> edge_stored_values;
+
+  // initialize the table
   for (int v1_id = 0; v1_id < graph.getVertexNum(); v1_id++) {
     auto v1 = graph.getVertexById(v1_id);
     edge_stored_values.emplace_back(graph.getVertexNum());
@@ -316,26 +355,34 @@ FormationGraphDynProgResult formation_graph_dynamic_programming(const FormationG
       auto v2 = graph.getVertexById(v2_id);
       if (graph.hasEdge(v1, v2)) {
         for (unsigned int a1_id = 0; a1_id < v1.get().size(); a1_id++) {
-          edge_stored_values[v1_id][v2_id].emplace_back(-1, graph.getVertexNum());
+          edge_stored_values[v1_id][v2_id].emplace_back(-1, graph.getVertexNum());   // -1 means no solution yet
         }
       }
     }
   }
 
+  // start running the algorithm
   auto result = formation_graph_dynamic_programming_dfs(graph,
                                                         edge_stored_values,
                                                         graph.getVertexById(init_vertex_id),
                                                         graph.getVertexById(init_vertex_id), // just a dummy
-                                                        -1,
+                                                        -1,   // the root has no parent, and hence no action id
                                                         init_vertex_id); // just a dummy
 
   return result;
 }
 
 
-// **************************************************************************************
-//   Formation Graph Search
-// **************************************************************************************
+/**************************************************************************************
+ *  The Graph Search Algorithm
+ *
+ *  This is a completer search algorithm that is roughly three times faster than the brute force method.
+ ************************************************************************************** */
+
+/**************************************************************************************
+ *  This is the cache being used in the graph search algorithm
+ ************************************************************************************** */
+
 
 class FormationGraphSearchCache {
 
@@ -362,8 +409,6 @@ public:
   {
     calcFreeVertexIds();
     calcInvertedFreeVertexIds();
-//    __vv__(free_vertex_ids);
-//    __vv__(inverted_free_vertex_ids);
   }
 
   void assign(int vid, int aid) {
@@ -467,56 +512,6 @@ private:
 
 };
 
-//template<typename V, typename E>
-//void find_common_prefix_in_tree_dfs(std::unordered_map<int,std::vector<int>>& common_prefix,
-//                                    const AdjListGraph<V,E>& graph,
-//                                    const typename AdjListGraph<V,E>::Vertex& vertex,
-//                                    std::vector<int>& current_path)
-//{
-//  auto& last_prefix = common_prefix[vertex.id()];
-//  if (last_prefix.empty()) {
-//    last_prefix = current_path;
-//  } else {
-//    int i=0;
-//    for(int vid : last_prefix) {
-//      if (i >= current_path.size() || current_path[i] != vid) break;
-//      i++;
-//    }
-//    last_prefix.clear();
-//    for(int j=0; j<i; j++) {
-//      last_prefix.push_back(current_path[j]);
-//    }
-//  }
-//
-//  for (auto[edge, vertex2]: vertex.outgoingEVList()) {
-//    current_path.push_back(vertex2.id());
-//    find_common_prefix_in_tree_dfs(common_prefix, graph, vertex2, current_path);
-//    current_path.pop_back();
-//  }
-//}
-//
-//// this is a brute force method, suitable for a tree only.
-//template<typename V, typename E>
-//std::unordered_map<int,std::vector<int>> find_common_prefix_in_tree_by_brute_force(const AdjListGraph<V,E>& graph, const typename AdjListGraph<V,E>::Vertex root) {
-//  std::unordered_map<int,std::vector<int>> common_prefix(graph.getVertexNum());
-//  std::vector<int> current_path;
-//  current_path.push_back(root.id());
-//  find_common_prefix_in_tree_dfs(common_prefix, graph, root, current_path);
-//  return common_prefix;
-//}
-//
-//
-//std::vector<int> find_common_prefix_in_formation_graph_by_brute_force(const FormationGraph& graph) {
-//  auto common_prefix = find_common_prefix_in_tree_by_brute_force(graph, graph.getVertexById(0));
-//
-//  std::vector<int> common_prefix_last_vertex(graph.getVertexNum());
-//  for(int vid=0; vid<graph.getVertexNum(); vid++) {
-//    common_prefix_last_vertex[vid] = common_prefix[vid].back();
-//  }
-//
-//  return common_prefix_last_vertex;
-//}
-
 
 void find_common_prefix_in_formation_graph_dfs(std::list<int>& reversed_prefix, const FormationGraph& graph, const FormationGraph::Vertex& vertex, std::set<int>& visited, int init_vertex_id) {
   auto find_ptr = std::find(reversed_prefix.begin(), reversed_prefix.end(), vertex.id());
@@ -539,6 +534,7 @@ void find_common_prefix_in_formation_graph_dfs(std::list<int>& reversed_prefix, 
   }
 }
 
+
 std::vector<int> find_common_prefix_in_formation_graph(const FormationGraph& graph, int init_vertex_id) {
   std::vector<int> common_prefix_last_vertex(graph.getVertexNum());
 
@@ -553,6 +549,17 @@ std::vector<int> find_common_prefix_in_formation_graph(const FormationGraph& gra
 }
 
 
+bool advance_vector_counter(std::vector<int>& counter, const std::vector<int>& counter_size) {
+  unsigned int i = 0;
+  while(i < counter.size()) {
+    counter[i]++;
+    if (counter[i] < counter_size[i]) return true;
+    counter[i]=0;
+    i++;
+  }
+  return false;
+}
+
 
 FormationGraphResult formation_graph_search_dfs(const FormationGraph& graph,
                                                 const std::vector<std::vector<int>>& common_prefix_last_vid,
@@ -560,7 +567,9 @@ FormationGraphResult formation_graph_search_dfs(const FormationGraph& graph,
                                                 const FormationGraph::Vertex& last_vertex,
                                                 std::vector<int>& assignment,
                                                 FormationGraphSearchCache& cache,
-                                                int init_vertex_id);
+                                                int init_vertex_id,
+                                                double time_limit,
+                                                const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time);
 
 
 FormationGraphResult formation_graph_search_dfs_max(const FormationGraph& graph,
@@ -569,8 +578,14 @@ FormationGraphResult formation_graph_search_dfs_max(const FormationGraph& graph,
                                                     const FormationGraph::Vertex& last_vertex,
                                                     std::vector<int>& assignment,
                                                     FormationGraphSearchCache& cache,
-                                                    int init_vertex_id)
+                                                    int init_vertex_id,
+                                                    double time_limit,
+                                                    const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time)
 {
+  if (duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start_time).count() >= time_limit) {
+    return FormationGraphResult();  // invalid value
+  }
+
   // set the max value to a1
   int current_vid = current_vertex.id();
   int a1_id = assignment[current_vid];
@@ -588,7 +603,9 @@ FormationGraphResult formation_graph_search_dfs_max(const FormationGraph& graph,
       // compute the max value directly
       for (auto[edge, next_vertex]: current_vertex.outgoingEVList()) {
         auto v_of_max = formation_graph_search_dfs(graph, common_prefix_last_vid, next_vertex, current_vertex,
-                                                   assignment, cache, init_vertex_id);
+                                                   assignment, cache, init_vertex_id, time_limit, start_time);
+        if (!v_of_max.isValid()) { return v_of_max; }
+
         if (v_of_max.getTime() > max_value.getTime()) {
           max_value.setTime(v_of_max.getTime());
         }
@@ -633,7 +650,9 @@ FormationGraphResult formation_graph_search_dfs_max(const FormationGraph& graph,
         // compute the max value 2
         for (auto[edge, next_vertex]: current_vertex.outgoingEVList()) {
           auto v_of_max_2 = formation_graph_search_dfs(graph, common_prefix_last_vid, next_vertex, current_vertex,
-                                                       assignment, cache, init_vertex_id);
+                                                       assignment, cache, init_vertex_id, time_limit, start_time);
+          if (!v_of_max_2.isValid()) { return v_of_max_2; }
+
           if (v_of_max_2.getTime() > max_value_2.getTime()) {
             max_value_2.setTime(v_of_max_2.getTime());
           }
@@ -680,8 +699,14 @@ FormationGraphResult formation_graph_search_dfs(const FormationGraph& graph,
                                                 const FormationGraph::Vertex& last_vertex,
                                                 std::vector<int>& assignment,
                                                 FormationGraphSearchCache& cache,
-                                                int init_vertex_id)
+                                                int init_vertex_id,
+                                                double time_limit,
+                                                const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time)
 {
+  if (duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start_time).count() >= time_limit) {
+    return FormationGraphResult();  // invalid value
+  }
+
   if (current_vertex.id() != init_vertex_id && assignment[current_vertex.id()] >= 0) {  // no min loop
 
     int last_a_id = assignment[last_vertex.id()];
@@ -702,7 +727,11 @@ FormationGraphResult formation_graph_search_dfs(const FormationGraph& graph,
                                                  last_vertex,
                                                  assignment,
                                                  cache,
-                                                 init_vertex_id);
+                                                 init_vertex_id,
+                                                 time_limit,
+                                                 start_time);
+      if (!max_value.isValid()) { return max_value; }
+
       cache.set(current_vertex.id(), max_value);
     }
 
@@ -725,7 +754,11 @@ FormationGraphResult formation_graph_search_dfs(const FormationGraph& graph,
                                                       last_vertex,
                                                       assignment,
                                                       cache,
-                                                      init_vertex_id);
+                                                      init_vertex_id,
+                                                      time_limit,
+                                                      start_time);
+      if (!max_value.isValid()) { return max_value; }
+
       assignment[current_vertex.id()] = -1;
       cache.unassign(current_vertex.id());
 
@@ -741,10 +774,15 @@ FormationGraphResult formation_graph_search_dfs(const FormationGraph& graph,
 }
 
 
-FormationGraphResult formation_graph_search(const FormationGraph& graph, int init_vertex_id) {
-  // auto common_prefix_last_vert_bf = find_common_prefix_in_formation_graph_by_brute_force(graph);
+/**************************************************************************************
+ *  This is the main function of the graph search algorithm
+ ************************************************************************************** */
+
+
+FormationGraphResult formation_graph_search(const FormationGraph& graph, int init_vertex_id, double time_limit) {
+  auto start_time = std::chrono::high_resolution_clock::now();
+
   auto common_prefix_last_vertex = find_common_prefix_in_formation_graph(graph, init_vertex_id);
-  // assert(common_prefix_last_vert_bf == common_prefix_last_vertex);
 
   std::vector<std::vector<int>> common_prefix_last_vid(graph.getVertexNum());
   for(int vid=0; vid<graph.getVertexNum(); vid++) {
@@ -762,17 +800,17 @@ FormationGraphResult formation_graph_search(const FormationGraph& graph, int ini
                                            graph.getVertexById(init_vertex_id), // just a dummy
                                            assignment,
                                            cache, // just a dummy
-                                           init_vertex_id);
+                                           init_vertex_id,
+                                           time_limit,
+                                           start_time);
   return result;
 }
 
 
 
-// **************************************************************************************
-//   testing
-// **************************************************************************************
-
-#define TEST_EQ_DOMAIN_SIZE 4
+/**************************************************************************************
+ *  Testing
+ ************************************************************************************** */
 
 
 FormationActions calcDefaultFormationActions(int n, std::mt19937& rng, std::uniform_int_distribution<std::mt19937::result_type>& rndgen_action_duration) {
@@ -796,297 +834,79 @@ FormationDeltas calcDefaultFormationDeltas(int n, std::mt19937& rng, std::unifor
 }
 
 
-FormationGraph makeFormationGraph0(int action_num, std::mt19937& rng) {
+FormationGraph makeRandomGridFormationGraph(std::mt19937& rng, int size_x, int size_y, int action_num) {
 
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_action_duration(5, TEST_EQ_DOMAIN_SIZE + 5);
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_delta(0, TEST_EQ_DOMAIN_SIZE);
+  auto calcVertexId = [](int x, int y, int size_x) {
+    return y * size_x + x;
+  };
 
-  FormationGraph graph;
-
-  auto v1 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v2 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v3 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v4 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-
-  assert(v1.id() == 0);
-
-  graph.addEdge(v1, v2, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v2, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v3, v4, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-
-  return graph;
-}
-
-
-FormationGraph makeFormationGraph1(int action_num, std::mt19937& rng) {
-
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_action_duration(5, TEST_EQ_DOMAIN_SIZE + 5);
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_delta(0, TEST_EQ_DOMAIN_SIZE);
+  std::uniform_int_distribution<std::mt19937::result_type> rndgen_action_duration(5, 10);
+  std::uniform_int_distribution<std::mt19937::result_type> rndgen_delta(1, 4);
 
   FormationGraph graph;
 
-  auto v1 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v2 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v3 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v4 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-
-  assert(v1.id() == 0);
-
-  graph.addEdge(v1, v2, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v1, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v2, v4, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v3, v4, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-
-  return graph;
-}
-
-FormationGraph makeFormationGraph1_1(int action_num, std::mt19937& rng) {
-
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_action_duration(5, TEST_EQ_DOMAIN_SIZE + 5);
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_delta(0, TEST_EQ_DOMAIN_SIZE);
-
-  FormationGraph graph;
-
-  auto v1 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v2 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v3 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v4 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-
-  assert(v1.id() == 0);
-
-  graph.addEdge(v1, v2, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v1, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v2, v4, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  // graph.addEdge(v3, v4, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-
-  return graph;
-}
-
-
-FormationGraph makeFormationGraph1_2(int action_num, std::mt19937& rng) {
-
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_action_duration(5, TEST_EQ_DOMAIN_SIZE + 5);
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_delta(0, TEST_EQ_DOMAIN_SIZE);
-
-  FormationGraph graph;
-
-  auto v1 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v2 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v3 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v4 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v5 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-
-  assert(v1.id() == 0);
-
-  graph.addEdge(v1, v2, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v1, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v2, v4, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v3, v5, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-
-  return graph;
-}
-
-FormationGraph makeFormationGraph2(int action_num, std::mt19937& rng) {
-
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_action_duration(5, TEST_EQ_DOMAIN_SIZE + 5);
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_delta(0, TEST_EQ_DOMAIN_SIZE);
-
-  FormationGraph graph;
-
-  auto v1 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v2 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v3 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v4 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-
-  assert(v1.id() == 0);
-
-  graph.addEdge(v1, v2, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v1, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v2, v4, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v3, v4, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v2, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-
-  return graph;
-}
-
-FormationGraph makeFormationGraph3(int action_num, std::mt19937& rng) {
-
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_action_duration(20, TEST_EQ_DOMAIN_SIZE + 20);
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_delta(5, TEST_EQ_DOMAIN_SIZE+20);
-
-  FormationGraph graph;
-
-  auto v1 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v2 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v3 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v4 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v5 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v6 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-
-  assert(v1.id() == 0);
-
-  graph.addEdge(v1, v2, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v1, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v2, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v2, v4, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v3, v4, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v4, v5, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v5, v6, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-
-  return graph;
-}
-
-
-void test_formation_graph_1() {
-  auto& rng = Shared::getInstance().getRng();
-
-  int init_vertex_id = 0;
-
-  for(int trial=0; trial<200; trial++) {
-    auto graph = makeFormationGraph3(TEST_EQ_DOMAIN_SIZE, rng);
-    // std::cout << graph;
-
-    auto start_time_bf = std::chrono::high_resolution_clock::now();
-    auto ans_bf = formation_graph_brute_force(graph, init_vertex_id);
-    auto end_time_bf = std::chrono::high_resolution_clock::now();
-
-    auto start_time_gg = std::chrono::high_resolution_clock::now();
-    auto ans_gg = formation_graph_search(graph, init_vertex_id);
-    auto end_time_gg = std::chrono::high_resolution_clock::now();
-
-    auto start_time_dp = std::chrono::high_resolution_clock::now();
-    auto ans_dp = formation_graph_dynamic_programming(graph, init_vertex_id);
-    auto dp_new_graph = ans_dp.makeReducedGraph(graph);
-    auto ans_dp_new_graph = formation_graph_search(dp_new_graph, init_vertex_id);
-    auto end_time_dp = std::chrono::high_resolution_clock::now();
-
-    std::cout << ans_bf.getTime() << " " << ans_gg.getTime() << " " << ans_dp.getTime() << " (" << ans_dp.getTime() - ans_gg.getTime() << ")";
-
-    // auto new_ans_dp_time_1 = calc_formation_graph_end_time_schedule_max_time(calc_formation_graph_end_time_schedule(graph, ans_dp.toFormationGraphResultByFirst(graph)));
-    // std::cout << " " << new_ans_dp_time_1 << " (" << new_ans_dp_time_1 - ans_gg.getTime() << ")";
-    auto new_ans_dp_time_2 = calc_formation_graph_end_time_schedule_max_time(
-        calc_formation_graph_end_time_schedule(dp_new_graph, ans_dp_new_graph, init_vertex_id));
-    std::cout << " " << new_ans_dp_time_2 << " (" << new_ans_dp_time_2 - ans_gg.getTime() << ")";
-
-    std::cout << " [" << ans_dp_new_graph.getTime() << "]";
-
-    std::cout << "   ";
-
-    std::cout << " " << duration_cast<std::chrono::microseconds>(end_time_bf - start_time_bf).count();
-    std::cout << " " << duration_cast<std::chrono::microseconds>(end_time_gg - start_time_gg).count();
-    std::cout << " " << duration_cast<std::chrono::microseconds>(end_time_dp - start_time_dp).count();
-
-    if (ans_bf.getTime() != ans_gg.getTime()) {
-      std::cout << "  ans_bf != ans_gg (diff = " << ans_bf.getTime() - ans_gg.getTime() << ")" << std::endl;
-      break;
-    } else if (ans_gg.getTime() < ans_dp.getTime()) {
-      std::cout << "  ans_gg < ans_dp" << std::endl;
-      break;
-    } else if (!ans_gg.hasAllAssigned()) {
-      std::cout << "  !ans_gg.hasAllAssigned()" << std::endl;
-      __pp__("bf's assignment: ", ans_bf.getAssignment());
-      __pp__("gg's assignment: ", ans_gg.getAssignment());
-      break;
-    } else if (ans_gg.getAssignment() != ans_bf.getAssignment()) {
-      auto plan = calc_formation_graph_end_time_schedule(graph, ans_gg, init_vertex_id);
-      auto max_time = calc_formation_graph_end_time_schedule_max_time(plan);
-      if (max_time != ans_bf.getTime()) {
-        std::cout << "  ans_gg.getAssignment() != ans_bf.getAssignment()" << std::endl;
-        __pp__("bf's assignment: ", ans_bf.getAssignment());
-        __pp__("gg's assignment: ", ans_gg.getAssignment());
-        __pp__("And the max time is different: ", max_time);
-        break;
-      }
+  for(int y=0; y<size_y; y++) {
+    for(int x=0; x<size_x; x++) {
+      int id = calcVertexId(x, y, size_x);
+      auto v = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
+      assert(v.id() == id && "Error in makeRandomGridFormationGraph(): incorrect node id");
     }
-    std::cout << std::endl;
   }
 
-  __pp__("okay");
-}
+  for(int y=0; y<size_y-1; y++) {
+    for(int x=0; x<size_x; x++) {
+      int id1 = calcVertexId(x, y, size_x);
+      int id2 = calcVertexId(x, y + 1, size_x);
+      auto v1 = graph.getVertexById(id1);
+      auto v2 = graph.getVertexById(id2);
+      graph.addEdge(v1, v2, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
+    }
+  }
 
-
-// ---------------------------------------------------------------------------------------
-
-FormationGraph makeFormationGraph10(int action_num, std::mt19937& rng) {
-
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_action_duration(5, TEST_EQ_DOMAIN_SIZE + 5);
-  std::uniform_int_distribution<std::mt19937::result_type> rndgen_delta(0, TEST_EQ_DOMAIN_SIZE);
-
-  FormationGraph graph;
-
-  auto v0 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v1 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v2 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-  auto v3 = graph.addVertex(calcDefaultFormationActions(action_num, rng, rndgen_action_duration));
-
-  assert(v0.id() == 0);
-
-  graph.addEdge(v1, v0, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v1, v2, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v0, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-  graph.addEdge(v2, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-
-//  graph.addEdge(v0, v1, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-//  graph.addEdge(v0, v2, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-//  graph.addEdge(v1, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
-//  graph.addEdge(v2, v3, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
+  for(int x=0; x<size_x-1; x++) {
+    for(int y=0; y<size_y; y++) {
+      int id1 = calcVertexId(x, y, size_x);
+      int id2 = calcVertexId(x + 1, y, size_x);
+      auto v1 = graph.getVertexById(id1);
+      auto v2 = graph.getVertexById(id2);
+      graph.addEdge(v1, v2, calcDefaultFormationDeltas(action_num, rng, rndgen_delta));
+    }
+  }
 
   return graph;
 }
 
 
+void pure_formation_graph_expr(const FormationGraph& graph, int init_vertex_id) {
 
-void test_formation_graph_2() {
-  auto& rng = Shared::getInstance().getRng();
+  auto start_time_gg = std::chrono::high_resolution_clock::now();
+  auto ans_gg = formation_graph_search(graph, init_vertex_id, EXPR_TIME_LIMIT);
+  auto end_time_gg = std::chrono::high_resolution_clock::now();
 
-  auto graph = makeFormationGraph10(TEST_EQ_DOMAIN_SIZE, rng);
-  int init_vertex_id = 1;
-
-  std::cout << graph << std::endl;
-
-  __line__("formation_graph_brute_force");
-  auto ans_bf = formation_graph_brute_force(graph, init_vertex_id);
-
-  __line__("formation_graph_search");
-  auto ans_gg = formation_graph_search(graph, init_vertex_id);
-
-  __line__("formation_graph_dynamic_programming");
+  auto start_time_dp = std::chrono::high_resolution_clock::now();
   auto ans_dp_tmp = formation_graph_dynamic_programming(graph, init_vertex_id);
+  auto end_time_dp_tmp = std::chrono::high_resolution_clock::now();
   auto graph_dp = ans_dp_tmp.makeReducedGraph(graph);
-  auto ans_dp = formation_graph_search(graph_dp, init_vertex_id);
+  auto ans_dp = formation_graph_search(graph_dp, init_vertex_id, EXPR_TIME_LIMIT);
+  auto end_time_dp = std::chrono::high_resolution_clock::now();
 
-  std::cout << ans_bf.getTime() << " " << ans_gg.getTime() << " " << ans_dp.getTime() << " " << "[" << ans_dp_tmp.getTime() << "]" << " (" << ans_dp.getTime() - ans_gg.getTime() << ")";
+  double exetime_gg = duration_cast<std::chrono::microseconds>(end_time_gg - start_time_gg).count() / 1000000.0;
+  double exetime_dp_tmp = duration_cast<std::chrono::microseconds>(end_time_dp_tmp - start_time_dp).count() / 1000000.0;
+  double exetime_dp = duration_cast<std::chrono::microseconds>(end_time_dp - start_time_dp).count() / 1000000.0;
 
-  std::cout << std::endl;
+  std::cout << "No of cars = " << graph.getVertexNum() << std::endl;
+  std::cout << "GSearch makespan = " << (ans_gg.isValid()?(ans_gg.getTime() * EXPR_TIME_STEP):0.0) << std::endl;
+  std::cout << "DynProg makespan = " << (ans_dp.isValid()?(ans_dp.getTime() * EXPR_TIME_STEP):0.0) << std::endl;
+  std::cout << "GSearch execution time = " << exetime_gg << std::endl;
+  std::cout << "DynProg execution time = " << exetime_dp << std::endl;
+}
 
-  __vv__(ans_bf);
-  __vv__(ans_gg);
-  __vv__(ans_dp);
-  __vv__(ans_dp_tmp);
 
-  std::cout << std::endl;
-
-  if (ans_bf.getTime() != ans_gg.getTime()) {
-    std::cout << "Error: ans_bf != ans_gg (diff = " << ans_bf.getTime() - ans_gg.getTime() << ")" << std::endl;
-  } else if (ans_gg.getTime() < ans_dp_tmp.getTime()) {
-    std::cout << "Error: ans_gg < ans_dp_tmp" << std::endl;
-  } else if (!ans_gg.hasAllAssigned()) {
-    std::cout << "Error: !ans_gg.hasAllAssigned()" << std::endl;
-    __pp__("bf's assignment: ", ans_bf.getAssignment());
-    __pp__("gg's assignment: ", ans_gg.getAssignment());
-  } else if (ans_gg.getAssignment() != ans_bf.getAssignment()) {
-    auto plan = calc_formation_graph_end_time_schedule(graph, ans_gg, init_vertex_id);
-    auto max_time = calc_formation_graph_end_time_schedule_max_time(plan);
-    if (max_time != ans_bf.getTime()) {
-      std::cout << "Error: ans_gg.getAssignment() != ans_bf.getAssignment()" << std::endl;
-      __pp__("bf's assignment: ", ans_bf.getAssignment());
-      __pp__("gg's assignment: ", ans_gg.getAssignment());
-      __pp__("And the max time is different: ", max_time);
-    }
-  }
-
-  std::cout << std::endl;
-
+void pure_formation_graph_expr_1() {
+  auto& rng = Shared::getInstance().getRng();
+  auto graph = makeRandomGridFormationGraph(rng, 4, 5, 2);
+  int init_vertex_id = 0;
+  pure_formation_graph_expr(graph, init_vertex_id);
 }
 
 

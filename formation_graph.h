@@ -1,7 +1,3 @@
-//
-// Created by Tsz-Chiu Au on 3/1/22.
-//
-
 #ifndef SIM_FORMATION_GRAPH_H
 #define SIM_FORMATION_GRAPH_H
 
@@ -14,6 +10,9 @@
 #include "shared.h"
 #include "graph.h"
 
+#define EXPR_TIME_STEP 0.025
+#define EXPR_TIME_LIMIT 60.0
+
 
 using FormationTime = int;
 using FormationActions = std::vector<FormationTime>;
@@ -24,6 +23,8 @@ using FormationSchedule = std::vector<FormationTime>;
 
 /**************************************************************************************
  *  FormationGraphResult
+ *
+ *  This class holds the result of the brute-force search and the graph search
  ************************************************************************************** */
 
 class FormationGraphResult {
@@ -33,7 +34,7 @@ class FormationGraphResult {
 
 public:
 
-  FormationGraphResult() {}
+  FormationGraphResult() : time(-1.0) {}
 
   FormationGraphResult(FormationTime time, int vertex_num) :
     time(time), assignment(vertex_num, -1)
@@ -54,6 +55,7 @@ public:
 
   void addTime(FormationTime t) { time += t; }
 
+  bool isValid() const { return time >= 0.0; }
 
   const std::vector<int>& getAssignment() const { return assignment; }
 
@@ -89,8 +91,11 @@ public:
 };
 
 
+
 /**************************************************************************************
  *  FormationGraphDynProgResult
+ *
+ *  This class holds the result of the dynamic programming algorithm
  ************************************************************************************** */
 
 class FormationGraphDynProgResult {
@@ -119,6 +124,7 @@ public:
 
   void addTime(FormationTime t) { time += t; }
 
+  bool isValid() const { return time >= 0.0; }
 
   const std::vector<std::vector<int>>& getAssignment() const { return assignment; }
 
@@ -181,24 +187,23 @@ FormationSchedule calc_formation_graph_schedule(const FormationGraph& graph, con
 
 void advanceFormationGraphSchedule(FormationSchedule& schedule, FormationTime time);
 
+
 /**************************************************************************************
- *  Algorithms
+ *  The main functions of the three algorithms
  ************************************************************************************** */
 
 FormationGraphResult formation_graph_brute_force(const FormationGraph& graph, int init_vertex_id);
 
 FormationGraphDynProgResult formation_graph_dynamic_programming(const FormationGraph& graph, int init_vertex_id);
 
-FormationGraphResult formation_graph_search(const FormationGraph& graph, int init_vertex_id);
+FormationGraphResult formation_graph_search(const FormationGraph& graph, int init_vertex_id, double time_limit = EXPR_TIME_LIMIT);
 
 
 /**************************************************************************************
  *  Tests
  ************************************************************************************** */
 
-void test_formation_graph_1();
-
-void test_formation_graph_2();
+void pure_formation_graph_expr_1();
 
 
 #endif //SIM_FORMATION_GRAPH_H

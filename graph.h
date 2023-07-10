@@ -2,7 +2,6 @@
 #define SIM_GRAPH_H
 
 #include <iostream>
-#include <fstream>
 #include <stdexcept>
 #include <list>
 #include <vector>
@@ -10,8 +9,6 @@
 #include <queue>
 #include <limits>
 #include <cassert>
-
-#include "shared.h"
 
 
 template<typename V, typename E>
@@ -299,15 +296,15 @@ public:
       EdgeObj& e2_obj = *(e2.edge_obj_ptr);
       VertexObj& v2_obj = *(v2.vertex_obj_ptr);
       v2_obj.incoming_ev_list.erase(e2_obj.dest_incoming_ev_itr);
-      edge_obj_collection.erase(e2_obj.edge_obj_collection_itr);
       edge_collection.erase(e2_obj.edge_collection_itr);
+      edge_obj_collection.erase(e2_obj.edge_obj_collection_itr);
     }
     for(auto [ e2, v2 ] : v_obj.incoming_ev_list) {
       EdgeObj& e2_obj = *(e2.edge_obj_ptr);
       VertexObj& v2_obj = *(v2.vertex_obj_ptr);
       v2_obj.outgoing_ev_list.erase(e2_obj.orig_outgoing_ev_itr);
-      edge_obj_collection.erase(e2_obj.edge_obj_collection_itr);
       edge_collection.erase(e2_obj.edge_collection_itr);
+      edge_obj_collection.erase(e2_obj.edge_obj_collection_itr);
     }
     // actually delete the vertex
     vid_to_vertex.erase(v_obj.vertex_id);
@@ -445,6 +442,7 @@ private:
 
 };
 
+
 /*
  * The default "nullptr" to a vertex
  */
@@ -554,6 +552,7 @@ private:
 
 };
 
+
 // ---------------------------------------------------------------------------------
 //    Floyd-Warshall Algorithm
 // ---------------------------------------------------------------------------------
@@ -661,11 +660,6 @@ public:
 
 };
 
-// ---------------------------------------------------------------------------------
-//    Basic Graph Algorithms
-// ---------------------------------------------------------------------------------
-
-
 
 // ---------------------------------------------------------------------------------
 //    Testing
@@ -675,6 +669,8 @@ public:
 void test_graph_1();
 
 void test_graph_2();
+
+
 
 #endif //SIM_GRAPH_H
 
